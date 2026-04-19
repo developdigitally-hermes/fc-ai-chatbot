@@ -1,0 +1,72 @@
+# Farm Credibly — Hermes Agent Configuration
+# Full reference: https://github.com/NousResearch/hermes-agent/blob/main/cli-config.yaml.example
+
+# =============================================================================
+# Model
+# =============================================================================
+model:
+  provider: openrouter
+  default: anthropic/claude-3-5-haiku   # Fast, large context, good Patois approximation.
+  # Alternatives (all via OpenRouter):
+  # - anthropic/claude-sonnet-4-5        # Higher quality, higher cost
+  # - meta-llama/llama-3.3-70b-instruct  # Open-source fallback, 131K context
+
+# =============================================================================
+# Gateway — Telegram
+# =============================================================================
+gateway:
+  telegram:
+    enabled: true
+    # Restrict to specific Telegram user IDs. Find yours by messaging @userinfobot.
+    # Leave empty to allow any user (not recommended for production).
+    allowed_users:
+      - "${TELEGRAM_ALLOWED_USER_ID}"
+
+# =============================================================================
+# Speech-to-Text (STT)
+# Voice messages sent by farmers are automatically transcribed.
+# =============================================================================
+stt:
+  enabled: true
+  provider: local          # free, runs on-device via faster-whisper
+  local:
+    model: base            # ~150 MB download on first use. Use "small" for better accuracy.
+    # language: en         # Force English transcription. Leave blank for auto-detect.
+
+# =============================================================================
+# Text-to-Speech (TTS)
+# When a farmer sends a voice message, Clara replies with audio too.
+# =============================================================================
+tts:
+  provider: edge           # Microsoft Edge TTS — free, no API key needed
+  edge:
+    voice: en-JM-OrlaNeural  # Jamaican English female voice.
+    # Alternative: en-JM-NoahNeural (male)
+    # For higher quality: switch provider to elevenlabs and set ELEVENLABS_API_KEY in .env
+
+# =============================================================================
+# Memory
+# =============================================================================
+memory:
+  enabled: true            # Hermes builds a persistent model of each user across sessions
+
+# =============================================================================
+# Context Compression
+# Auto-compresses long conversations to stay within model context limits.
+# =============================================================================
+compression:
+  enabled: true
+  threshold: 0.65          # Compress when 65% of context window is used
+
+# =============================================================================
+# Agent
+# =============================================================================
+agent:
+  max_turns: 20            # Max tool-calling iterations per message (lower = cheaper)
+
+# =============================================================================
+# Display (Gateway)
+# =============================================================================
+display:
+  tool_progress: new       # Show tool activity only when the tool changes (reduces noise)
+  interim_assistant_messages: true

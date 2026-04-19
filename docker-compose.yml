@@ -1,0 +1,38 @@
+services:
+  hermes:
+    # Pin to a specific release tag in production for stability.
+    # Update by changing the tag and running: docker compose pull && docker compose up -d
+    image: nousresearch/hermes-agent:latest
+
+    restart: unless-stopped
+
+    volumes:
+      # Persistent agent state: sessions, memory, SQLite DB, skill cache
+      - hermes-data:/opt/data
+
+      # Farm Credibly customisations — mounted on top of the volume.
+      # These are the only files in this repo. Edit them; no rebuild needed.
+      # SOUL.md hot-reloads on every message. config.yaml requires a restart.
+      - ./SOUL.md:/opt/data/SOUL.md
+      - ./config.yaml:/opt/data/config.yaml
+
+      # API keys and secrets. Copy .env.example → .env and fill in values.
+      # Never commit .env to git.
+      - ./.env:/opt/data/.env
+
+    # Remap the container's hermes user to match your host UID/GID so
+    # volume-mounted files are owned correctly. Adjust to match `id -u` on the VPS.
+    environment:
+      HERMES_UID: "1000"
+      HERMES_GID: "1000"
+
+    healthcheck:
+      test: ["CMD-SHELL", "hermes --version > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  hermes-data:
+    driver: local

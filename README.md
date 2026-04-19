@@ -1,42 +1,123 @@
-# FC AI Chatbot
+# Farm Credibly — AI Agricultural Assistant
 
-## Overview
-This is a Telegram AI chatbot built using the Hermes Agent framework, developed by Develop Digitally Limited.
+A Telegram-based AI assistant for Jamaican farmers, powered by [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research).
 
-## Setup
+Farmers send voice or text messages. Clara — the assistant — replies in Jamaican Creole with grounded, practical agricultural advice: crop disease, pest management, soil health, market prices, weather adaptation, and more.
 
-### Prerequisites
-- Python 3.8+
-- Git
-- Telegram Bot Token
+---
 
-### Installation
-1. Clone the repository
-2. Create a virtual environment
-3. Install dependencies
-4. Configure environment variables
-5. Run the bot
+## What's In This Repo
 
-### Configuration
-Create a `.env` file with the following variables:
-- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token
-- `OPENROUTER_API_KEY`: OpenRouter API key for model access
+This repository contains **only the Farm Credibly customisations**. The Hermes Agent framework itself is pulled directly from the official Docker image — no fork, no divergence, no maintenance burden.
 
-## Running the Bot
+| File | Purpose |
+|---|---|
+| `SOUL.md` | Clara's persona — Jamaican Creole voice, domain knowledge, example conversations |
+| `config.yaml` | Farm Credibly configuration — Jamaican TTS voice, STT, model, Telegram gateway |
+| `docker-compose.yml` | Pulls official Hermes image, mounts config |
+| `.env.example` | Template for API keys (copy to `.env`, never commit) |
+
+---
+
+## Quick Start
+
+### 1. Prerequisites
+
+- Docker + Docker Compose on a VPS (tested on Ubuntu 24.04, 2GB+ RAM)
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- An [OpenRouter](https://openrouter.ai) API key
+
+### 2. Deploy
+
 ```bash
-# Activate virtual environment
-source venv/bin/activate
+git clone https://github.com/developdigitally-hermes/fc-ai-chatbot.git
+cd fc-ai-chatbot
 
-# Start the Telegram gateway
-hermes gateway run
+# Configure secrets
+cp .env.example .env
+nano .env   # fill in TELEGRAM_BOT_TOKEN, OPENROUTER_API_KEY, TELEGRAM_ALLOWED_USER_ID
+
+# Start
+docker compose up -d
+
+# Check logs
+docker compose logs -f
 ```
 
-## Contributing
-Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
+### 3. Test
 
-## License
-[To be added]
+Send a message to your Telegram bot. Clara will respond.
 
-## Contact
-Develop Digitally Limited
-Email: info@developdigitally.com
+Send a **voice message** — Clara will transcribe it and reply with audio in a Jamaican English voice.
+
+---
+
+## Updating Hermes
+
+Hermes releases updates frequently. To update:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+That's it. Your SOUL.md, config.yaml, and all farmer data are preserved in the `hermes-data` volume.
+
+---
+
+## Customising Clara
+
+### Change the persona
+Edit `SOUL.md`. Changes take effect immediately — no restart needed.
+
+### Change the model, voice, or STT
+Edit `config.yaml`, then restart:
+```bash
+docker compose restart hermes
+```
+
+### Add custom skills
+Create a `skills/` directory and mount it in `docker-compose.yml`:
+```yaml
+volumes:
+  - ./skills:/opt/data/skills/custom
+```
+
+---
+
+## Voice Configuration
+
+| Provider | Cost | Quality | Setup |
+|---|---|---|---|
+| Edge TTS (`en-JM-OrlaNeural`) | Free | Good — native Jamaican English voice | Already configured |
+| ElevenLabs | ~$0.30/1K chars | Excellent — can voice-clone | Add `ELEVENLABS_API_KEY` to `.env`, set `tts.provider: elevenlabs` in `config.yaml` |
+| faster-whisper (local STT) | Free | Good | Default — auto-downloads ~150MB model on first use |
+| Groq STT | Free tier | Fast | Add `GROQ_API_KEY` to `.env`, set `stt.provider: groq` in `config.yaml` |
+
+---
+
+## Architecture
+
+```
+Telegram farmer message
+        ↓
+  Hermes Gateway (nousresearch/hermes-agent Docker image)
+        ↓
+  [voice] → faster-whisper STT → transcript
+        ↓
+  Clara persona (SOUL.md) + Farm Credibly config (config.yaml)
+        ↓
+  LLM (Claude Haiku via OpenRouter)
+        ↓
+  [voice input] → Edge TTS (en-JM-OrlaNeural) → audio reply
+        ↓
+  Telegram reply (text + optional voice bubble)
+```
+
+---
+
+## Upstream
+
+Hermes Agent is developed by [Nous Research](https://nousresearch.com).
+Upstream repo: [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
+Docker image: `nousresearch/hermes-agent:latest`
