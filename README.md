@@ -50,18 +50,60 @@ Send a message to your Telegram bot. Clara will respond.
 
 Send a **voice message** — Clara will transcribe it and reply with audio in a Jamaican English voice.
 
+### 4. Verify the audio pipeline
+
+```bash
+make verify-audio
+```
+
+This checks that `faster-whisper` (STT) and `edge-tts` (TTS) are available inside the container, reads your config, and synthesises a short test phrase (`"Wah gwaan, farmer. Mi name is Clara."`) to confirm the Jamaican voice works end-to-end — all without needing Telegram.
+
+Expected output:
+```
+→ Checking faster-whisper (STT)...
+  ✅ faster-whisper OK
+→ Checking STT config...
+  provider: local
+  model:    base
+  ✅ STT config OK
+→ Checking edge-tts (TTS)...
+  ✅ edge-tts OK
+→ Checking TTS voice...
+  provider: edge
+  voice:    en-JM-OrlaNeural
+  ✅ TTS config OK
+→ Synthesising test phrase...
+  ✅ TTS synthesis OK (14820 bytes generated)
+
+✅ Audio pipeline ready.
+   Send a voice message to your Telegram bot to test end-to-end.
+```
+
+**First voice message note:** The `base` Whisper model (~150 MB) is downloaded on the first voice message received and cached in the `hermes-data` volume. There will be a ~10 second delay on that first message only.
+
 ---
+
+## Common Commands
+
+```bash
+make up            # start the bot
+make down          # stop the bot
+make logs          # tail logs
+make restart       # restart after config change
+make pull          # pull latest Hermes image + restart
+make verify-audio  # confirm STT + TTS pipeline is working
+make shell         # open a shell inside the container
+make config        # print the active config.yaml
+make soul          # print the active SOUL.md
+```
 
 ## Updating Hermes
 
-Hermes releases updates frequently. To update:
-
 ```bash
-docker compose pull
-docker compose up -d
+make pull
 ```
 
-That's it. Your SOUL.md, config.yaml, and all farmer data are preserved in the `hermes-data` volume.
+Your SOUL.md, config.yaml, and all farmer data are preserved in the `hermes-data` volume.
 
 ---
 
