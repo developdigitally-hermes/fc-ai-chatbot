@@ -1,0 +1,49 @@
+services:
+  hermes:
+    # Pin to a specific release tag in production for stability.
+    # Update by changing the tag and running: docker compose pull && docker compose up -d
+    image: nousresearch/hermes-agent:latest
+
+    # Start the Telegram gateway (not the interactive CLI).
+    command: gateway run
+
+    restart: unless-stopped
+
+    # API keys and secrets — injected as environment variables.
+    # Copy .env.example → .env and fill in values. Never commit .env to git.
+    # Using env_file (not a volume mount) avoids a Docker quirk where bind-mounting
+    # a file to a path that doesn't yet exist inside a named volume creates a
+    # directory instead of a file.
+    env_file:
+      - .env
+
+    volumes:
+      # Persistent agent state: sessions, memory, SQLite DB, skill cache
+      - hermes-data:/opt/data
+
+      # Farm Credibly customisations — mounted on top of the volume.
+      # These are the only files in this repo. Edit them; no rebuild needed.
+      # SOUL.md hot-reloads on every message. config.yaml requires a restart.
+      - ./SOUL.md:/opt/data/SOUL.md
+      - ./config.yaml:/opt/data/config.yaml
+
+    # The entrypoint is designed to start as root, remap the internal hermes user
+    # to HERMES_UID/GID, then drop privileges with gosu.  The Dockerfile sets
+    # USER=hermes (10000) so we must override back to root here.
+    # HERMES_UID/GID should match `id -u` on the VPS host so volume files are
+    # owned by the right user.  Default 1000 works for a standard Linux VPS.
+    user: "0"
+    environment:
+      HERMES_UID: "1000"
+      HERMES_GID: "1000"
+
+    healthcheck:
+      test: ["CMD-SHELL", "hermes --version > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  hermes-data:
+    driver: local
