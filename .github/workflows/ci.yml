@@ -1,0 +1,185 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  # ── 1. Static validation (no Docker needed) ─────────────────────────────────
+  validate:
+    name: Validate config files
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Required files present
+        run: |
+          missing=()
+          for f in SOUL.md config.yaml docker-compose.yml .env.example; do
+            [ -f "$f" ] || missing+=("$f")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "❌ Missing required files: ${missing[*]}"
+            exit 1
+          fi
+          echo "✅ All required files present"
+
+      - name: config.yaml is valid YAML with required keys
+        run: |
+          pip install pyyaml -q
+          python3 -c "
+          import yaml, sys
+
+          doc = yaml.safe_load(open('config.yaml'))
+
+          # Required top-level keys
+          for key in ['model', 'gateway', 'stt', 'tts', 'memory']:
+              if key not in doc:
+                  print(f'❌ Missing required key: {key}')
+                  sys.exit(1)
+
+          # TTS voice must be Jamaican
+          voice = doc.get('tts', {}).get('edge', {}).get('voice', '')
+          assert 'JM' in voice, f'Expected Jamaican TTS voice (JM), got: {voice!r}'
+
+          # STT must be enabled
+          assert doc.get('stt', {}).get('enabled'), 'stt.enabled must be true'
+
+          print(f'✅ config.yaml valid')
+          print(f'   TTS voice : {voice}')
+          print(f'   STT model : {doc[\"stt\"][\"local\"][\"model\"]}')
+          print(f'   Model     : {doc[\"model\"][\"default\"]}')
+          "
+
+      - name: .env.example has all required keys
+        run: |
+          missing=()
+          for key in TELEGRAM_BOT_TOKEN OPENROUTER_API_KEY TELEGRAM_ALLOWED_USER_ID TELEGRAM_ALLOWED_USERS; do
+            grep -q "^${key}=" .env.example || missing+=("$key")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "❌ Missing keys in .env.example: ${missing[*]}"
+            exit 1
+          fi
+          echo "✅ .env.example has all required keys"
+
+      - name: SOUL.md is non-empty with Clara persona
+        run: |
+          [ -s SOUL.md ] || (echo "❌ SOUL.md is empty" && exit 1)
+          grep -q "Clara" SOUL.md || (echo "❌ Clara persona not found in SOUL.md" && exit 1)
+          grep -qi "farmer\|farm\|jamaican\|patois" SOUL.md || (echo "❌ Farm/Jamaican domain markers missing" && exit 1)
+          echo "✅ SOUL.md OK ($(wc -l < SOUL.md) lines, Clara persona present)"
+
+  # ── 2. Docker Compose config validation ────────────────────────────────────
+  compose:
+    name: docker compose config
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create dummy .env
+        run: |
+          cat > .env << 'EOF'
+          TELEGRAM_BOT_TOKEN=0000000000:AAEdummy_token_for_ci_validation_only
+          OPENROUTER_API_KEY=sk-or-v1-dummy00000000000000000000000000000000000000000000
+          TELEGRAM_ALLOWED_USER_ID=12345678
+          TELEGRAM_ALLOWED_USERS=12345678
+          EOF
+
+      - name: docker compose config (validates syntax + env interpolation)
+        run: |
+          docker compose config --quiet
+          echo "✅ docker-compose.yml valid"
+
+      - name: docker-compose.yml has required directives
+        run: |
+          python3 -c "
+          import yaml, sys
+          doc = yaml.safe_load(open('docker-compose.yml'))
+          svc = doc['services']['hermes']
+
+          checks = {
+              'image':    svc.get('image', '').startswith('nousresearch/hermes-agent'),
+              'command':  svc.get('command') == 'gateway run',
+              'env_file': '.env' in str(svc.get('env_file', [])),
+              'user':     svc.get('user') == '0',
+              'restart':  svc.get('restart') == 'unless-stopped',
+          }
+          failed = [k for k, v in checks.items() if not v]
+          if failed:
+              for f in failed:
+                  print(f'❌ docker-compose.yml missing/wrong: {f}')
+              sys.exit(1)
+          print('✅ docker-compose.yml has all required directives')
+          print(f'   image:   {svc[\"image\"]}')
+          print(f'   command: {svc[\"command\"]}')
+          print(f'   user:    {svc[\"user\"]}')
+          "
+
+  # ── 3. Container smoke test ─────────────────────────────────────────────────
+  # Pulls the real upstream image and confirms:
+  #   - faster-whisper is importable (STT)
+  #   - edge-tts is importable (TTS)
+  #   - config.yaml mounts and loads correctly inside the container
+  #   - TTS voice is en-JM-* (Jamaican English)
+  smoke:
+    name: Container smoke test
+    runs-on: ubuntu-latest
+    needs: [validate, compose]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull Hermes image
+        run: docker pull nousresearch/hermes-agent:latest
+
+      - name: faster-whisper importable (STT)
+        run: |
+          docker run --rm \
+            --user 0 \
+            --entrypoint /opt/hermes/.venv/bin/python3 \
+            nousresearch/hermes-agent:latest \
+            -c "from faster_whisper import WhisperModel; print('✅ faster-whisper OK')"
+
+      - name: edge-tts importable (TTS)
+        run: |
+          docker run --rm \
+            --user 0 \
+            --entrypoint /opt/hermes/.venv/bin/python3 \
+            nousresearch/hermes-agent:latest \
+            -c "import edge_tts; print('✅ edge-tts OK')"
+
+      - name: config.yaml mounts and voice confirmed inside container
+        run: |
+          docker run --rm \
+            --user 0 \
+            --entrypoint /opt/hermes/.venv/bin/python3 \
+            -v "$(pwd)/config.yaml:/tmp/config.yaml:ro" \
+            nousresearch/hermes-agent:latest \
+            -c "
+          import yaml
+          doc = yaml.safe_load(open('/tmp/config.yaml'))
+          voice = doc['tts']['edge']['voice']
+          stt   = doc['stt']['local']['model']
+          print(f'  TTS voice : {voice}')
+          print(f'  STT model : {stt}')
+          assert 'JM' in voice, f'Expected Jamaican voice, got: {voice}'
+          print('✅ config.yaml mounted and Jamaican voice confirmed')
+          "
+
+      - name: SOUL.md mounts inside container
+        run: |
+          docker run --rm \
+            --user 0 \
+            --entrypoint /opt/hermes/.venv/bin/python3 \
+            -v "$(pwd)/SOUL.md:/tmp/SOUL.md:ro" \
+            nousresearch/hermes-agent:latest \
+            -c "
+          soul = open('/tmp/SOUL.md').read()
+          assert 'Clara' in soul
+          assert len(soul) > 1000
+          print(f'✅ SOUL.md mounted ({len(soul)} chars, Clara persona present)')
+          "

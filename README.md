@@ -35,7 +35,8 @@ cd fc-ai-chatbot
 
 # Configure secrets
 cp .env.example .env
-nano .env   # fill in TELEGRAM_BOT_TOKEN, OPENROUTER_API_KEY, TELEGRAM_ALLOWED_USER_ID
+nano .env   # fill in TELEGRAM_BOT_TOKEN, OPENROUTER_API_KEY,
+           # TELEGRAM_ALLOWED_USER_ID and TELEGRAM_ALLOWED_USERS (same value for both)
 
 # Start
 docker compose up -d
