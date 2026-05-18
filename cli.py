@@ -1634,6 +1634,11 @@ class HermesCLI:
         # Inline diff previews for write actions (display.inline_diffs in config.yaml)
         self._inline_diffs_enabled = CLI_CONFIG["display"].get("inline_diffs", True)
 
+        # Bionic reading: partially bold the first ~30% of each word (display.bionic_reading)
+        self.bionic_reading = CLI_CONFIG["display"].get("bionic_reading", False)
+        self._bionic_word_min = CLI_CONFIG["display"].get("bionic_word_min", 4)
+        self._bionic_ratio = CLI_CONFIG["display"].get("bionic_ratio", 0.3)
+
         # Streaming display state
         self._stream_buf = ""        # Partial line buffer for line-buffered rendering
         self._stream_started = False  # True once first delta arrives
@@ -2578,6 +2583,13 @@ class HermesCLI:
         _tc = getattr(self, "_stream_text_ansi", "")
         while "\n" in self._stream_buf:
             line, self._stream_buf = self._stream_buf.split("\n", 1)
+            if self.bionic_reading and line.strip():
+                from agent.bionic_reading import apply_bionic_reading
+                line = apply_bionic_reading(
+                    line,
+                    word_min=self._bionic_word_min,
+                    ratio=self._bionic_ratio,
+                )
             _cprint(f"{_tc}{line}{_RST}" if _tc else line)
 
     def _flush_stream(self) -> None:
@@ -2595,7 +2607,15 @@ class HermesCLI:
 
         if self._stream_buf:
             _tc = getattr(self, "_stream_text_ansi", "")
-            _cprint(f"{_tc}{self._stream_buf}{_RST}" if _tc else self._stream_buf)
+            _flush_line = self._stream_buf
+            if self.bionic_reading and _flush_line.strip():
+                from agent.bionic_reading import apply_bionic_reading
+                _flush_line = apply_bionic_reading(
+                    _flush_line,
+                    word_min=self._bionic_word_min,
+                    ratio=self._bionic_ratio,
+                )
+            _cprint(f"{_tc}{_flush_line}{_RST}" if _tc else _flush_line)
             self._stream_buf = ""
 
         # Close the response box
@@ -5383,6 +5403,8 @@ class HermesCLI:
             self._toggle_yolo()
         elif canonical == "reasoning":
             self._handle_reasoning_command(cmd_original)
+        elif canonical == "bionic":
+            self._handle_bionic_command(cmd_original)
         elif canonical == "fast":
             self._handle_fast_command(cmd_original)
         elif canonical == "compress":
@@ -5682,8 +5704,16 @@ class HermesCLI:
                         _resp_text = "#FFF8DC"
 
                     _chat_console = ChatConsole()
+                    _bg_resp_render = response
+                    if self.bionic_reading:
+                        from agent.bionic_reading import apply_bionic_reading
+                        _bg_resp_render = apply_bionic_reading(
+                            response,
+                            word_min=self._bionic_word_min,
+                            ratio=self._bionic_ratio,
+                        )
                     _chat_console.print(Panel(
-                        _rich_text_from_ansi(response),
+                        _rich_text_from_ansi(_bg_resp_render),
                         title=f"[{_resp_color} bold]{label} (background #{task_num})[/]",
                         title_align="left",
                         border_style=_resp_color,
@@ -6195,10 +6225,38 @@ class HermesCLI:
         else:
             _cprint(f"  {_ACCENT}✓ Reasoning effort set to '{arg}' (session only){_RST}")
 
+    def _handle_bionic_command(self, cmd: str):
+        """Handle /bionic — toggle bionic reading on/off.
+
+        Usage:
+            /bionic          Show current state
+            /bionic on       Enable bionic reading (saved to config)
+            /bionic off      Disable bionic reading (saved to config)
+        """
+        parts = cmd.strip().split(maxsplit=1)
+        if len(parts) < 2:
+            state = "on ✓" if self.bionic_reading else "off"
+            _cprint(f"  {_ACCENT}Bionic reading: {state}{_RST}")
+            _cprint(f"  {_DIM}Word min: {self._bionic_word_min} chars  |  Bold ratio: {self._bionic_ratio:.0%}{_RST}")
+            _cprint(f"  {_DIM}Usage: /bionic on|off{_RST}")
+            return
+
+        arg = parts[1].strip().lower()
+        if arg in ("on", "1", "true", "yes"):
+            self.bionic_reading = True
+            save_config_value("display.bionic_reading", True)
+            _cprint(f"  {_ACCENT}✓ Bionic reading: ON (saved){_RST}")
+            _cprint(f"  {_DIM}  First ~{self._bionic_ratio:.0%} of words ≥{self._bionic_word_min} chars will be bolded.{_RST}")
+        elif arg in ("off", "0", "false", "no"):
+            self.bionic_reading = False
+            save_config_value("display.bionic_reading", False)
+            _cprint(f"  {_ACCENT}✓ Bionic reading: OFF (saved){_RST}")
+        else:
+            _cprint(f"  {_DIM}Unknown option '{arg}'. Usage: /bionic on|off{_RST}")
+
     def _handle_fast_command(self, cmd: str):
         """Handle /fast — toggle fast mode (OpenAI Priority Processing / Anthropic Fast Mode)."""
         if not self._fast_command_available():
-            _cprint("  (._.) /fast is only available for models that support fast mode (OpenAI Priority Processing or Anthropic Fast Mode).")
             return
 
         # Determine the branding for the current model
@@ -7799,8 +7857,16 @@ class HermesCLI:
                     pass
                 else:
                     _chat_console = ChatConsole()
+                    _resp_text_render = response
+                    if self.bionic_reading:
+                        from agent.bionic_reading import apply_bionic_reading
+                        _resp_text_render = apply_bionic_reading(
+                            response,
+                            word_min=self._bionic_word_min,
+                            ratio=self._bionic_ratio,
+                        )
                     _chat_console.print(Panel(
-                        _rich_text_from_ansi(response),
+                        _rich_text_from_ansi(_resp_text_render),
                         title=f"[{_resp_color} bold]{label}[/]",
                         title_align="left",
                         border_style=_resp_color,

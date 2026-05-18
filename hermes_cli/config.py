@@ -506,7 +506,10 @@ DEFAULT_CONFIG = {
         "tool_progress_command": False,  # Enable /verbose command in messaging gateway
         "tool_progress_overrides": {},  # DEPRECATED — use display.platforms instead
         "tool_preview_length": 0,  # Max chars for tool call previews (0 = no limit, show full paths/commands)
-        "platforms": {},  # Per-platform display overrides: {"telegram": {"tool_progress": "all"}, "slack": {"tool_progress": "off"}}
+        "platforms": {},  # Per-platform display overrides: {\"telegram\": {\"tool_progress\": \"all\"}, \"slack\": {\"tool_progress\": \"off\"}}
+        "bionic_reading": False,    # Partially bold first ~30% of words for faster eye anchoring (experimental)
+        "bionic_word_min": 4,       # Minimum word length (chars) to apply bionic bolding
+        "bionic_ratio": 0.3,        # Fraction of each word to bold (0.0–1.0)
     },
 
     # Privacy settings

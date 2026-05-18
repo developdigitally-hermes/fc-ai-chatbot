@@ -115,6 +115,8 @@ COMMAND_REGISTRY: list[CommandDef] = [
                subcommands=("normal", "fast", "status", "on", "off")),
     CommandDef("skin", "Show or change the display skin/theme", "Configuration",
                cli_only=True, args_hint="[name]"),
+    CommandDef("bionic", "Toggle bionic reading (partial word bolding for faster scanning)",
+               "Configuration", aliases=("br",), args_hint="[on|off|status]"),
     CommandDef("voice", "Toggle voice mode", "Configuration",
                args_hint="[on|off|tts|status]", subcommands=("on", "off", "tts", "status")),
 
