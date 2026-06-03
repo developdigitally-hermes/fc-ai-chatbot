@@ -30,8 +30,14 @@ stt:
   enabled: true
   provider: local          # free, runs on-device via faster-whisper
   local:
-    model: base            # ~150 MB download on first use. Use "small" for better accuracy.
-    # language: en         # Force English transcription. Leave blank for auto-detect.
+    model: base            # ~150 MB, downloads once on first voice message, stored in volume.
+                           # Use "small" for better accuracy at ~2x CPU cost.
+                           # compute_type auto-selects int8 on CPU (no config needed).
+    # language: en         # Force English. Leave blank for auto-detect (Patois → en).
+
+  # Faster alternative: Groq STT (free tier, ~10x faster than local on CPU).
+  # Add GROQ_API_KEY to .env and switch provider to "groq".
+  # groq: {}               # no extra config needed — just set GROQ_API_KEY in .env
 
 # =============================================================================
 # Text-to-Speech (TTS)
@@ -40,9 +46,14 @@ stt:
 tts:
   provider: edge           # Microsoft Edge TTS — free, no API key needed
   edge:
-    voice: en-JM-OrlaNeural  # Jamaican English female voice.
-    # Alternative: en-JM-NoahNeural (male)
-    # For higher quality: switch provider to elevenlabs and set ELEVENLABS_API_KEY in .env
+    voice: en-JM-OrlaNeural  # Jamaican English female (Microsoft neural voice).
+    # Alternative Jamaican voice: en-JM-NoahNeural (male)
+    # Other Caribbean options:  en-TT-KerwinNeural (Trinidad), en-BB-SamanthaNeural (Barbados)
+    #
+    # Upgrade path: switch to ElevenLabs for higher quality / voice cloning
+    # provider: elevenlabs
+    # elevenlabs:
+    #   voice_id: <your-cloned-voice-id>    # clone a Jamaican speaker for authentic audio
 
 # =============================================================================
 # Memory
